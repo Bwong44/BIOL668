@@ -16,8 +16,17 @@
 # Test with the function calls below
 
 
-#class Seq:
+class Seq:
+    def __init__(self, sequence, gene_name, species):
+        self.sequence = sequence
+        self.gene_name = gene_name
+        self.species = species
+    
+    def print_record(self):
+        return self.sequence
 
+    def __str__(self): #Overload str function to return itself
+        return f"{self.sequence}, {self.gene_name} : {self.species}"
 
 #class DNA(Seq):
 
