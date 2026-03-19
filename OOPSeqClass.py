@@ -31,10 +31,11 @@ class Seq:
 #class DNA(Seq):
 
 
-# myseq=Seq("ATATAG","my_gene","H.sapiens")
-# print(myseq.print_record())
-# print(myseq.gene)
-# print(myseq.species)
+if __name__ == "__main__":
+    myseq=Seq("ATATAG","my_gene","H.sapiens")
+    print(myseq.print_record())
+    print(myseq.gene_name)
+    print(myseq.species)
 
 #d=DNA("GATCTC","my_dna","D.terebrans","AX5667.2")
 #d.print_record()
