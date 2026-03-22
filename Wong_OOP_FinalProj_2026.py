@@ -92,9 +92,10 @@ aa_mol_weights={'A':89.09,'C':121.15,'D':133.1,'E':147.13,'F':165.19,
 class Seq:
 
     def __init__(self,sequence,gene,species):
-        self.sequence=sequence
+        self.sequence=sequence.upper().strip()
         self.gene=gene
-        self.species=species
+        self.species=species    
+        self.kmers=[]
 
     def __str__(self):
         return self.sequence
@@ -102,9 +103,21 @@ class Seq:
     def print_record(self):
         print(self.species + " " + self.gene + ": " + self.sequence)
 
-    #def make_kmers(self, k=3):
+    def make_kmers(self, k=3):
+        for i in range(len(self.sequence)):
+            print(i)
+            
+
 
     #def fasta(self):
+
+# Methods:
+# (1) Add a method called make_kmers that makes overlapping kmers of a given
+#length from self.sequence
+# appends these to self.kmers. Default kmer parameter=3.
+# (2) Add a method called fasta that returns a fasta formatted string like this:
+# >species gene
+# AGATTGA
     
 class DNA(Seq):
 
