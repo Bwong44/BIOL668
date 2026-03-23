@@ -103,9 +103,10 @@ class Seq:
     def print_record(self):
         print(self.species + " " + self.gene + ": " + self.sequence)
 
-    def make_kmers(self, k=3):
+    def make_kmers(self, k=3): 
         for i in range(len(self.sequence)):
-            print(i)
+            if len(self.sequence[i:i+k]) == k:
+                self.kmers.append(self.sequence[i:i+k])
             
 
 
