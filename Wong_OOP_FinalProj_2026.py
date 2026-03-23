@@ -102,6 +102,9 @@ class Seq:
     def __str__(self):
         return self.sequence
 
+    def __len__(self): #Adds len overload so we can access the seq length of the object
+        return len(self.sequence)
+
     def print_record(self):
         print(self.species + " " + self.gene + ": " + self.sequence)
 
