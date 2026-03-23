@@ -145,13 +145,31 @@ class DNA(Seq):
 
 
 class RNA(DNA):
-
-    #def __init__(self):
+    
+    def __init__(self,sequence,gene,species,geneid,**kwargs):
+        super().__init__(sequence,gene,species,geneid)
+        self.sequence=self.sequence.replace("T","U")
+        self.codons=[]
         
-    #def make_codons(self):
+    def make_codons(self):
+        for i in range(0,len(self.sequence),3):
+            if len(self.sequence[i:i+3]) == 3:
+                self.codons.append(self.sequence[i:i+3])
+        return self.codons
  
-    #def translate(self):
+    def translate(self):
+        protein_seq=""
+        for codon in self.codons:
+            print(codon)
 
+
+
+#  Methods:
+#  (1) Add make_codons which breaks the self.sequence into 3 letter codons
+#      and appends these codons to self.codons unless they are less than 3 letters long.
+#  (2) Add translate which uses the Global Variable standard_code below to
+#      translate the codons in self.codons and returns a protein sequence.
+    '''
 class Protein(Seq):
 
     #def __init__:
@@ -163,6 +181,6 @@ class Protein(Seq):
 x=DNA("G","tmp","m",000)
 
 
-
+'''
 
 
