@@ -63,6 +63,7 @@
 #      sequence assigned to the protein object. 
 
 
+
 import re
 
 standard_code = {
@@ -89,6 +90,7 @@ aa_mol_weights={'A':89.09,'C':121.15,'D':133.1,'E':147.13,'F':165.19,
                 'S':105.09,'T':119.12,'V':117.15,'W':204.23,'X':0,'Y':181.19}
 
 
+
 class Seq:
 
     def __init__(self,sequence,gene,species):
@@ -112,6 +114,8 @@ class Seq:
         fasta_output = ">" + self.species + " " + self.gene + "\n" + self.sequence
         return fasta_output
  
+
+
 class DNA(Seq):
 
     def __init__(self,sequence,gene,species,geneid,**kwargs):
@@ -144,6 +148,7 @@ class DNA(Seq):
         return frames_list
 
 
+
 class RNA(DNA):
     
     def __init__(self,sequence,gene,species,geneid,**kwargs):
@@ -166,25 +171,25 @@ class RNA(DNA):
                 protein_seq += "X" 
         return protein_seq
 
-
-
-#  Methods:
-#  (1) Add make_codons which breaks the self.sequence into 3 letter codons
-#      and appends these codons to self.codons unless they are less than 3 letters long.
-#  (2) Add translate which uses the Global Variable standard_code below to
-#      translate the codons in self.codons and returns a protein sequence.
-    '''
 class Protein(Seq):
 
-    #def __init__:
+    def __init__(self,sequence,gene,species,geneid,**kwargs):
+        super().__init__(sequence,gene,species)
+        self.sequence=re.sub("[^A-Z]","X",self.sequence)
+        self.geneid=geneid
 
-    #def total_hydro(self):
+    def total_hydro(self):
+        total_hydro_score=0
+        for aa in self.sequence:
+            if aa in kyte_doolittle:
+                total_hydro_score += kyte_doolittle[aa]
+        return total_hydro_score
 
-    #def mol_weight(self):
+    def mol_weight(self):
+        mol_weight_score=0
+        for aa in self.sequence:
+            if aa in  aa_mol_weights:
+                mol_weight_score += aa_mol_weights[aa]
+        return mol_weight_score
 
-x=DNA("G","tmp","m",000)
-
-
-'''
-
-
+#x=DNA("G","tmp","m",000) #Test class from lecture?
