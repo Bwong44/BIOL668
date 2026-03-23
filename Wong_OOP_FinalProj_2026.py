@@ -108,18 +108,10 @@ class Seq:
             if len(self.sequence[i:i+k]) == k:
                 self.kmers.append(self.sequence[i:i+k])
             
-
-
-    #def fasta(self):
-
-# Methods:
-# (1) Add a method called make_kmers that makes overlapping kmers of a given
-#length from self.sequence
-# appends these to self.kmers. Default kmer parameter=3.
-# (2) Add a method called fasta that returns a fasta formatted string like this:
-# >species gene
-# AGATTGA
-    
+    def fasta(self):
+        fasta_output = ">" + self.species + " " + self.gene + "\n" + self.sequence
+        return fasta_output
+ 
 class DNA(Seq):
 
     def __init__(self,sequence,gene,species,geneid,**kwargs):
