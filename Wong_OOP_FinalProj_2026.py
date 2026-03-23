@@ -160,7 +160,11 @@ class RNA(DNA):
     def translate(self):
         protein_seq=""
         for codon in self.codons:
-            print(codon)
+            if codon in standard_code:
+                protein_seq += standard_code[codon]
+            else:
+                protein_seq += "X" 
+        return protein_seq
 
 
 
