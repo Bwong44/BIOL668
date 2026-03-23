@@ -115,21 +115,35 @@ class Seq:
 class DNA(Seq):
 
     def __init__(self,sequence,gene,species,geneid,**kwargs):
-        super().__init__(sequence,gene,species)
-        self.sequence=sequence
+        super().__init__(sequence,gene,species) #Due to super the sequnece will already be upper and stripped
+        self.sequence=re.sub("[^ATGCU]","N",self.sequence)
         self.geneid=geneid
- 
+
     def analysis(self):
         gc=len(re.findall('G',self.sequence) + re.findall('C',self.sequence))
         return gc
+    
+    def print_info(self):
+        print(self.geneid + " ", end = "")
+        super().print_record()
 
-#    def print_info(self):
+    def reverse_complement(self):
+        reverse=self.sequence[::-1]
+        reverse=reverse.replace("A","t").replace("T","a").replace("G","c").replace("C","g").upper()
+        return reverse
 
-#    def reverse_complement(self):
+    def six_frames(self):
+        frames_list = []
+        frames_list.append(self.sequence) #1st frame
+        frames_list.append(self.sequence[1:]) #2nd frame by shifting 1
+        frames_list.append(self.sequence[2:]) #3rd frame by shifting 2
+        reverse_comp = self.reverse_complement()
+        frames_list.append(reverse_comp) #4th frame is reverse complement
+        frames_list.append(reverse_comp[1:]) #5th frame by shifting 1
+        frames_list.append(reverse_comp[2:]) #6th frame by shifting 2
+        return frames_list
 
-#    def six_frames(self):
 
-"""
 class RNA(DNA):
 
     #def __init__(self):
@@ -145,9 +159,6 @@ class Protein(Seq):
     #def total_hydro(self):
 
     #def mol_weight(self):
-
-"""
-    
 
 x=DNA("G","tmp","m",000)
 
