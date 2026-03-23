@@ -194,5 +194,15 @@ class Protein(Seq):
             if aa in  aa_mol_weights:
                 mol_weight_score += aa_mol_weights[aa]
         return mol_weight_score
+    
+    def amino_acid_composition(self): #Added aa comp dictionary
+        aa_composition={}
+        for aa in self.sequence:
+            if aa in aa_composition:
+                aa_composition[aa] += 1
+            else:
+                aa_composition[aa] = 1
+        return aa_composition
+
 
 #x=DNA("G","tmp","m",000) #Test class from lecture?
