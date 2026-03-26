@@ -105,6 +105,9 @@ class Seq:
     def __len__(self): #Adds len overload so we can access the seq length of the object
         return len(self.sequence)
 
+    def __eq__(self, other): # adds eq overload to compare two seq objects
+        return self.sequence == other.sequence
+
     def print_record(self):
         print(self.species + " " + self.gene + ": " + self.sequence)
 
@@ -116,8 +119,9 @@ class Seq:
     def fasta(self):
         fasta_output = ">" + self.species + " " + self.gene + "\n" + self.sequence
         return fasta_output
- 
 
+    def count_base(self, base): # counts the number of times a base is present in a sequence
+        return self.sequence.count(base)
 
 class DNA(Seq):
 
@@ -150,7 +154,16 @@ class DNA(Seq):
         frames_list.append(reverse_comp[2:]) #6th frame by shifting 2
         return frames_list
 
+    # calculates gc content of sequence
+    # if percent True -> return percentage
+    # if percent False -> return proportion
+    def gc_content(self, percent=False):
+        gc = self.sequence.count('G') + self.sequence.count('C')
 
+        if percent == True:
+            return (gc / len(self.sequence)) * 100
+        else:
+            return gc / len(self.sequence)
 
 class RNA(DNA):
     
