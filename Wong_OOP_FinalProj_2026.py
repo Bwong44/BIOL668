@@ -100,8 +100,14 @@ class Seq:
         self.kmers=[]
 
     def __str__(self):
+        """Overload str function to return the object's sequence.
+        
+        >>> s=Seq("AGT","tmp","m")
+        >>> print(s)
+        AGT
+        """
         return self.sequence
-
+    
     def __len__(self): #Adds len overload so we can access the seq length of the object
         return len(self.sequence)
 
@@ -217,5 +223,7 @@ class Protein(Seq):
                 aa_composition[aa] = 1
         return aa_composition
 
-
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
 #x=DNA("G","tmp","m",000) #Test class from lecture?
