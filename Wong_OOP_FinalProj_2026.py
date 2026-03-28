@@ -94,6 +94,17 @@ aa_mol_weights={'A':89.09,'C':121.15,'D':133.1,'E':147.13,'F':165.19,
 class Seq:
 
     def __init__(self,sequence,gene,species):
+        """Initialize the sequence class object with the given parameters.
+
+        >>> s=Seq(" AGTt ","tmp","m")
+        >>> s.sequence
+        'AGTT'
+        >>> s.gene
+        'tmp'
+        >>> s.species
+        'm'
+        """
+
         self.sequence=sequence.upper().strip()
         self.gene=gene
         self.species=species    
@@ -106,50 +117,136 @@ class Seq:
         >>> print(s)
         AGT
         """
+
         return self.sequence
     
     def __len__(self): #Adds len overload so we can access the seq length of the object
+        """Len overload to return the length of the sequence from the Seq class.
+
+        >>> s=Seq("AGTAGC","tmp","m")
+        >>> len(s)
+        6
+        """
+
         return len(self.sequence)
 
-    def __eq__(self, other): # adds eq overload to compare two seq objects
+    def __eq__(self, other): # adds eq overload to compare two seq objects - Troy Haynes
+        """Eq overload to compare the sequence of two Seq objects.
+
+        >>> s1=Seq("AGT","tmp","m")
+        >>> s2=Seq("AGT","tmp","m")
+        >>> s1 == s2
+        True
+        >>> s3=Seq("AGTA","tmp","m")
+        >>> s1 == s3
+        False
+        """
+
         return self.sequence == other.sequence
 
     def print_record(self):
+        """Prints the record in the format 'species gene: sequence'.
+
+        >>> s=Seq("AGT","test_gene","test_species")
+        >>> s.print_record()
+        test_species test_gene: AGT
+        """
+        
         print(self.species + " " + self.gene + ": " + self.sequence)
 
     def make_kmers(self, k=3): 
+        """Makes overlapping kmers from a given sequence and appends them to self.kmer list.
+
+        >>> s=Seq("AGTAGC","tmp","m")
+        >>> s.make_kmers()
+        >>> s.kmers
+        ['AGT', 'GTA', 'TAG', 'AGC']
+        """
+
         for i in range(len(self.sequence)):
             if len(self.sequence[i:i+k]) == k:
                 self.kmers.append(self.sequence[i:i+k])
             
     def fasta(self):
+        """Returns a fasta formatted string of the sequence.
+
+        >>> s=Seq("AGT","test_gene","test_species")
+        >>> print(s.fasta())
+        >test_species test_gene
+        AGT
+        """
+
         fasta_output = ">" + self.species + " " + self.gene + "\n" + self.sequence
         return fasta_output
 
     def count_base(self, base): # counts the number of times a base is present in a sequence
+        """Counts the number of times a given base is present in the sequence.
+
+        >>> s=Seq("AGTAGC","tmp","m")
+        >>> s.count_base("A")
+        2
+        """
+
         return self.sequence.count(base)
 
 class DNA(Seq):
 
     def __init__(self,sequence,gene,species,geneid,**kwargs):
+        """Initialize the DNA class object, inheriting from Seq class, adding geneid.
+
+        >>> d=DNA("AGTXAGC","tmp","m","geneid_test")
+        >>> d.sequence
+        'AGTNAGC'
+        >>> d.geneid
+        'geneid_test'
+        """
+
         super().__init__(sequence,gene,species) #Due to super the sequnece will already be upper and stripped
         self.sequence=re.sub("[^ATGCU]","N",self.sequence)
         self.geneid=geneid
 
     def analysis(self):
+        """Returns length of G and C in the DNA sequence.
+
+        >>> d=DNA("AGTXAGC","tmp","m","geneid_test")
+        >>> d.analysis()
+        3
+        """
+
         gc=len(re.findall('G',self.sequence) + re.findall('C',self.sequence))
         return gc
     
     def print_info(self):
+        """Inherits print_record and adds geneid to the beginning of the string.
+
+        >>> d=DNA("AGTXAGC","tmp","m","geneid_test")
+        >>> d.print_info()
+        geneid_test m tmp: AGTNAGC
+        """
+
         print(self.geneid + " ", end = "")
         super().print_record()
 
     def reverse_complement(self):
+        """Returns the reverse complement of the DNA sequence.
+
+        >>> d=DNA("AGTXAGC","tmp","m","geneid_test")
+        >>> d.reverse_complement()
+        'GCTNACT'
+        """
+
         reverse=self.sequence[::-1]
         reverse=reverse.replace("A","t").replace("T","a").replace("G","c").replace("C","g").upper()
         return reverse
 
     def six_frames(self):
+        """Returns a list of all 6 frames of the DNA sequence.
+
+        >>> d=DNA("AGTXAGC","tmp","m","geneid_test")
+        >>> d.six_frames()
+        ['AGTNAGC', 'GTNAGC', 'TNAGC', 'GCTNACT', 'CTNACT', 'TNACT']
+        """
+
         frames_list = []
         frames_list.append(self.sequence) #1st frame
         frames_list.append(self.sequence[1:]) #2nd frame by shifting 1
@@ -160,7 +257,7 @@ class DNA(Seq):
         frames_list.append(reverse_comp[2:]) #6th frame by shifting 2
         return frames_list
 
-    # calculates gc content of sequence
+    # calculates gc content of sequence - Troy Haynes
     # if percent True -> return percentage
     # if percent False -> return proportion
     def gc_content(self, percent=False):
