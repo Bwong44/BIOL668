@@ -261,6 +261,15 @@ class DNA(Seq):
     # if percent True -> return percentage
     # if percent False -> return proportion
     def gc_content(self, percent=False):
+        """Return the GC content of the DNA sequence as a percentage or proportion.
+
+        >>> d=DNA("AGTGCCTT","tmp","m","geneid_test")
+        >>> d.gc_content()
+        0.5
+        >>> d.gc_content(percent=True)
+        50.0
+        """
+
         gc = self.sequence.count('G') + self.sequence.count('C')
 
         if percent == True:
@@ -271,17 +280,40 @@ class DNA(Seq):
 class RNA(DNA):
     
     def __init__(self,sequence,gene,species,geneid,**kwargs):
+        """Initialize the RNA class object, inheriting from DNA class, changing Ts to Us and adding codons list.
+        
+        >>> r=RNA("AGTXAGC","tmp","m","geneid_test")
+        >>> r.sequence
+        'AGUNAGC'
+        >>> r.geneid
+        'geneid_test'
+        """
+
         super().__init__(sequence,gene,species,geneid)
         self.sequence=self.sequence.replace("T","U")
         self.codons=[]
         
     def make_codons(self):
+        """Returns the codon list of the sequence
+
+        >>> r=RNA("AGTXAGC","tmp","m","geneid_test")
+        >>> r.make_codons()
+        ['AGU', 'NAG']
+        """
         for i in range(0,len(self.sequence),3):
             if len(self.sequence[i:i+3]) == 3:
                 self.codons.append(self.sequence[i:i+3])
         return self.codons
  
     def translate(self):
+        """Translates the codons in self.codons into a protein sequence using the standard_code dictionary.
+        >>> r=RNA("AGTXAGC","tmp","m","geneid_test")
+        >>> r.make_codons()
+        ['AGU', 'NAG']
+        >>> r.translate()
+        'SX'
+        """
+
         protein_seq=""
         for codon in self.codons:
             if codon in standard_code:
