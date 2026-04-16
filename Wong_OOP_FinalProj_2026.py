@@ -131,17 +131,14 @@ class Seq:
         return len(self.sequence)
 
     def __eq__(self, other): # adds eq overload to compare two seq objects - Troy Haynes
-        """Eq overload to compare the sequence of two Seq objects.
+        """
+        Comparing two seq objects by sequence.
 
-        >>> s1=Seq("AGT","tmp","m")
-        >>> s2=Seq("AGT","tmp","m")
-        >>> s1 == s2
+        >>> Seq("ATGC", "gene1", "human") == Seq("ATGC", "gene2", "dog")
         True
-        >>> s3=Seq("AGTA","tmp","m")
-        >>> s1 == s3
+        >>> Seq("ATGC", "gene1", "human") == Seq("AAAA", "gene2", "dog")
         False
         """
-
         return self.sequence == other.sequence
 
     def print_record(self):
@@ -181,13 +178,15 @@ class Seq:
         return fasta_output
 
     def count_base(self, base): # counts the number of times a base is present in a sequence
-        """Counts the number of times a given base is present in the sequence.
+        """
+        Counts the occurrence of a specific base in sequence.
 
-        >>> s=Seq("AGTAGC","tmp","m")
-        >>> s.count_base("A")
+        >>> seq = Seq("AGAGTTT", "gene1", "human")
+        >>> seq.count_base("T")
+        3
+        >>> seq.count_base("A")
         2
         """
-
         return self.sequence.count(base)
 
 class DNA(Seq):
@@ -229,25 +228,25 @@ class DNA(Seq):
         super().print_record()
 
     def reverse_complement(self):
-        """Returns the reverse complement of the DNA sequence.
-
-        >>> d=DNA("AGTXAGC","tmp","m","geneid_test")
-        >>> d.reverse_complement()
-        'GCTNACT'
         """
+        Returns reverse complement of sequence.
 
+        >>> seq = DNA("ATGC","gene1","human",1)
+        >>> seq.reverse_complement()
+        'GCAT'
+        """
         reverse=self.sequence[::-1]
         reverse=reverse.replace("A","t").replace("T","a").replace("G","c").replace("C","g").upper()
         return reverse
 
     def six_frames(self):
-        """Returns a list of all 6 frames of the DNA sequence.
-
-        >>> d=DNA("AGTXAGC","tmp","m","geneid_test")
-        >>> d.six_frames()
-        ['AGTNAGC', 'GTNAGC', 'TNAGC', 'GCTNACT', 'CTNACT', 'TNACT']
         """
+        Returns the six reading frames of the sequence.
 
+        >>> seq = DNA("ATGCCG","gene1","human",1)
+        >>> seq.six_frames()
+        ['ATGCCG', 'TGCCG', 'GCCG', 'CGGCAT', 'GGCAT', 'GCAT']
+        """
         frames_list = []
         frames_list.append(self.sequence) #1st frame
         frames_list.append(self.sequence[1:]) #2nd frame by shifting 1
@@ -262,15 +261,15 @@ class DNA(Seq):
     # if percent True -> return percentage
     # if percent False -> return proportion
     def gc_content(self, percent=False):
-        """Return the GC content of the DNA sequence as a percentage or proportion.
+        """
+        Calculates GC content.
 
-        >>> d=DNA("AGTGCCTT","tmp","m","geneid_test")
-        >>> d.gc_content()
+        >>> seq = DNA("ATGC","gene1","human",8417)
+        >>> seq.gc_content()
         0.5
-        >>> d.gc_content(percent=True)
+        >>> seq.gc_content(True)
         50.0
         """
-
         gc = self.sequence.count('G') + self.sequence.count('C')
 
         if percent == True:
