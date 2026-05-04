@@ -1,0 +1,557 @@
+---
+title: "WONG_RNA_SEQ_LAB"
+output: html_document
+date: "2026-04-24"
+---
+---
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(limma)
+library(Glimma)
+library(edgeR)
+library(org.Mm.eg.db) #Mouse library
+library(R.utils)
+library(gplots) #heatmap
+library(ggrepel)#volcano p3
+#library(Mus.musculus) didn't work so it said to install org.Mn.eg.db
+```
+
+# Part 1: Tutorial using limma, Glimma and Edge R using the given datasets
+
+```{R}
+url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE63310&format=file" #Grabs the url download link and unzip them
+utils::download.file(url, destfile="GSE63310_RAW.tar", mode="wb") 
+utils::untar("GSE63310_RAW.tar", exdir = ".")
+files <- c("GSM1545535_10_6_5_11.txt", "GSM1545536_9_6_5_11.txt", "GSM1545538_purep53.txt",
+  "GSM1545539_JMS8-2.txt", "GSM1545540_JMS8-3.txt", "GSM1545541_JMS8-4.txt",
+  "GSM1545542_JMS8-5.txt", "GSM1545544_JMS9-P7c.txt", "GSM1545545_JMS9-P8c.txt")
+for(i in paste(files, ".gz", sep=""))
+  R.utils::gunzip(i, overwrite=TRUE)
+
+
+#Reads the file to show how they look like
+files <- c("GSM1545535_10_6_5_11.txt", "GSM1545536_9_6_5_11.txt", 
+   "GSM1545538_purep53.txt", "GSM1545539_JMS8-2.txt", 
+   "GSM1545540_JMS8-3.txt", "GSM1545541_JMS8-4.txt", 
+   "GSM1545542_JMS8-5.txt", "GSM1545544_JMS9-P7c.txt", 
+   "GSM1545545_JMS9-P8c.txt")
+read.delim(files[1], nrow=5)
+```
+
+## edgeR
+```{R}
+x <- readDGE(files, columns=c(1,3)) #Combines the 9 text files into a matrix of counts
+class(x)
+dim(x)
+
+# [1] "DGEList"
+# attr(,"package")
+# [1] "edgeR"
+# [1] 27179     9
+```
+## Data organization
+```{R}
+samplenames <- substring(colnames(x), 12, nchar(colnames(x))) #cuts the first 11 characters to have shorter names
+samplenames
+
+colnames(x) <- samplenames #Replaces our names with the shortened names
+group <- as.factor(c("LP", "ML", "Basal", "Basal", "ML", "LP", "Basal", "ML", "LP")) #Each file is now grouped with a certain condition
+
+x$samples$group <- group #Adds metadata to the files
+lane <- as.factor(rep(c("L004","L006","L008"), c(3,4,2)))
+x$samples$lane <- lane
+x$samples
+```
+
+## Organising gene annotations
+```{R}
+#genes is a secondary data frame in the DGEList-object that lets us look at information about the genes
+geneid <- rownames(x)
+genes <- select(org.Mm.eg.db, keys=geneid, columns=c("SYMBOL", "CHR"),  #Had to change org.Mn.eg.db and CHR
+                keytype="ENTREZID")
+head(genes)
+```
+
+## Remove duplicates
+```{R}
+genes <- genes[!duplicated(genes$ENTREZID),] #Remove duplicate ids
+
+x$genes <- genes
+x
+```
+## Transformations from the raw-scale
+```{R}
+cpm <- cpm(x)
+lcpm <- cpm(x, log=TRUE)
+#cpm = counts per million but doesn't account for gene length
+#The log-CPM values will be used for exploratory plots. 
+#By default, the offset is 2/L where 2 is the “prior count” and L is the average library size in millions, so the log-CPM values are related to the CPM values by log2(CPM + 2/L). 
+
+L <- mean(x$samples$lib.size) * 1e-6
+M <- median(x$samples$lib.size) * 1e-6
+c(L, M)
+
+summary(lcpm)
+```
+
+## Removing genes that are lowly expressed
+```{R}
+#Some genes are under expressed
+table(rowSums(x$counts==0)==9) #Checks for 0 rows in the 9 samples
+
+```
+
+From a biological point of view, genes that not expressed at a biologically meaningful level in any condition are not of interest and are therefore best ignored.
+
+## Auto filter
+```{R}
+keep.exprs <- filterByExpr(x, group=group) #Checks to see if gene is expressed enough and it prints out our reamining genes that are expressed enough
+x <- x[keep.exprs,, keep.lib.sizes=FALSE]
+dim(x)
+```
+
+By default, the function keeps genes with about 10 read counts or more in a minimum number of samples, where the number of samples is chosen according to the minimum group sample size. The filtering uses CPM to filter out so its not biased to large library sizes.
+
+## Figure for raw vs filtered
+```{R}
+lcpm.cutoff <- log2(10/M + 2/L)
+library(RColorBrewer)
+nsamples <- ncol(x)
+col <- brewer.pal(nsamples, "Paired")
+par(mfrow=c(1,2))
+
+#Plots density of log-CPM values for first sample, raw unfiltered data
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="A. Raw data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+
+#Recalculates after filtering
+lcpm <- cpm(x, log=TRUE)
+#Plots density for first sample after filtering
+plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.26), las=2, main="", xlab="")
+title(main="B. Filtered data", xlab="Log-cpm")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm[,i])
+lines(den$x, den$y, col=col[i], lwd=2)
+}
+legend("topright", samplenames, text.col=col, bty="n")
+```
+Plot A of the raw data shows the dist. of gene expression in log cpm before filtering, the dotted line is the cutoff for filtering. 
+
+Plot B after the filtering shows less density on the left and the curves are more aligned.
+
+## Normalising gene expression distributions
+```{R}
+x <- calcNormFactors(x, method = "TMM")
+x$samples$norm.factors
+#Normalizes our data, correcting for different library sizes and composition bias
+```
+
+## Visualize the noralization
+```{R}
+#the counts of the first sample are reduced to 5% of their original values, and in the second sample they are inflated to be 5-times larger.
+x2 <- x #Copies original data
+x2$samples$norm.factors <- 1
+x2$counts[,1] <- ceiling(x2$counts[,1]*0.05) #makes count smaller
+x2$counts[,2] <- x2$counts[,2]*5 #makes count larger
+
+par(mfrow=c(1,2))
+lcpm <- cpm(x2, log=TRUE) #Convert to log cpm
+
+#Raw data boxplot
+boxplot(lcpm, las=2, col=col, main="")
+title(main="A. Example: Unnormalised data",ylab="Log-cpm")
+x2 <- calcNormFactors(x2)  
+x2$samples$norm.factors
+
+#Normalized boxplots
+lcpm <- cpm(x2, log=TRUE)
+boxplot(lcpm, las=2, col=col, main="")
+title(main="B. Example: Normalised data",ylab="Log-cpm")
+```
+-Boxplots are unaligned due to sequencing depth, so we normalize the data so that we can interpret the data relative to each other and not just due to sample size bias.
+
+## Unsupervised clustering of samples
+```{R}
+#MDS Plot
+lcpm <- cpm(x, log=TRUE)
+par(mfrow=c(1,2))
+
+#Color by group
+col.group <- group
+levels(col.group) <-  brewer.pal(nlevels(col.group), "Set1")
+col.group <- as.character(col.group)
+
+#Color by lane
+col.lane <- lane
+levels(col.lane) <-  brewer.pal(nlevels(col.lane), "Set2")
+col.lane <- as.character(col.lane)
+
+plotMDS(lcpm, labels=group, col=col.group)
+title(main="A. Sample groups")
+plotMDS(lcpm, labels=lane, col=col.lane, dim=c(3,4))
+title(main="B. Sequencing lanes")
+```
+The first dimension represents the most variation in the data, Figure A is showing variation between sample type, and we see clustering of LP and ML vs Basal on the 1st dimension showing a distinc variation between LP and ML vs Basal.
+
+## Interactive MDS
+```{R}
+glMDSPlot(lcpm, labels=paste(group, lane, sep="_"), 
+          groups=x$samples[,c(2,5)], launch=FALSE)
+#Nothing pops up but the tutorial shows the link
+```
+
+## Differential expression analysis
+```{R}
+design <- model.matrix(~0+group+lane)
+colnames(design) <- gsub("group", "", colnames(design))
+design
+```
+
+```{R}
+contr.matrix <- makeContrasts(
+   BasalvsLP = Basal-LP, 
+   BasalvsML = Basal - ML, 
+   LPvsML = LP - ML, 
+   levels = colnames(design))
+contr.matrix
+```
+# Removing heteroscedascity
+```{R}
+par(mfrow=c(1,2))
+v <- voom(x, design, plot=TRUE)
+v
+
+vfit <- lmFit(v, design) #Fit linear model to eahc gene
+vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+
+efit <- eBayes(vfit) #Apply bayes to improve variance, and it does
+plotSA(efit, main="Final model: Mean-variance trend")
+```
+With these plots we're able to see how the data is heteroscadastic and how it imrpoves it with the final model, we see a straight line instead of the curved one.
+
+# Examining the number of DE genes
+```{R}
+summary(decideTests(efit))
+tfit <- treat(vfit, lfc=1)
+dt <- decideTests(tfit)
+summary(dt)
+
+de.common <- which(dt[,1]!=0 & dt[,2]!=0)
+length(de.common)
+
+head(tfit$genes$SYMBOL[de.common], n=20)
+
+vennDiagram(dt[,1:2], circle.col=c("turquoise", "salmon"))
+
+write.fit(tfit, dt, file="results.txt")
+```
+-Uses venn diagram to visualize the overlap in the contrast between the two.
+
+## Examining individual DE genes from top to bottom
+```{R}
+basal.vs.lp <- topTreat(tfit, coef=1, n=Inf) #Genes ranked for contrast 1
+basal.vs.ml <- topTreat(tfit, coef=2, n=Inf) #Genes ranked for contrast 2
+head(basal.vs.lp)
+
+head(basal.vs.ml)
+
+plotMD(tfit, column=1, status=dt[,1], main=colnames(tfit)[1], 
+       xlim=c(-8,13))
+
+glMDPlot(tfit, coef=1, status=dt, main=colnames(tfit)[1],
+         side.main="ENTREZID", counts=lcpm, groups=group, launch=FALSE)
+```
+-We see ranked differential expression results for each contrast and compare them based on fold change, red shows that a gene is expressed more in Basal than LP and blue is less in Basal than LP.
+
+# Heatmap
+```{R}
+basal.vs.lp.topgenes <- basal.vs.lp$ENTREZID[1:100]
+i <- which(v$genes$ENTREZID %in% basal.vs.lp.topgenes)
+mycol <- colorpanel(1000,"blue","white","red") #Heatmap of blue = lower, white = average, red = higher
+heatmap.2(lcpm[i,], scale="row",
+   labRow=v$genes$SYMBOL[i], labCol=group, 
+   col=mycol, trace="none", density.info="none", 
+   margin=c(8,6), lhei=c(2,10), dendrogram="column")
+```
+
+We have a heatmap of the top 100 genes comparing Basal and LP, showing their relative expression within each gene ahd how they are related with the tree.
+
+## Gene set testing with camera
+```{R}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("RNAseq123") #Used this to download the file we need
+
+load(system.file("extdata", "mouse_c2_v5p1.rda", package = "RNAseq123")) #Loads the mouse gene set
+idx <- ids2indices(Mm.c2,id=rownames(v))
+
+cam.BasalvsLP <- camera(v,idx,design,contrast=contr.matrix[,1]) #Tests which genes are enriched in 1st contrast
+head(cam.BasalvsLP,5)
+
+cam.BasalvsML <- camera(v,idx,design,contrast=contr.matrix[,2]) #Tests which genes are enriched in 2nd contrast
+head(cam.BasalvsML,5)
+
+barcodeplot(efit$t[,3], index=idx$LIM_MAMMARY_LUMINAL_MATURE_UP, 
+            index2=idx$LIM_MAMMARY_LUMINAL_MATURE_DN, main="LPvsML")
+```
+The red and blue bars represents the gene sets in the LP vs ML contrast. The LP vs ML shows an inverse correlation where when one goes down the other goes up. The camera test is good for large datasets of gene sets and observing which of them rank highly relative to others
+
+# Part 2: DESEQ2
+
+```{R}
+# install DESeq2
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#
+#BiocManager::install("DESeq2")
+#
+# install tidyverse (ggplot2 is in tidyverse)
+#install.packages("tidyverse")
+
+library("DESeq2")
+library("tidyverse")
+library("ggplot2")
+```
+
+#Read in data
+```{R}
+# define the path to the file
+# note this path is relative to the current working directory and the files are stored in a folder called data
+
+# read in the file
+rnaCount <- read.csv('rna_counts_data.csv')
+# show the first few lines
+head(rnaCount)
+
+#read in map file
+map <- read.csv("rna_map.csv") #meta data
+head(map)
+```
+
+The RNA count has the Geneid of each gene and its length as well as the count per gene per sample type. Our columns are our samples and each row is the count for each gene.
+
+The map file is basically the metadata where each column is the assoicted metadata per sample, including the sample id number, its group, the tumor type, name, and if it was a mutation or wild type. The names were slightly off for the RNAcount so I had to rename them to match.
+#Rename sample ids
+```{R}
+#I just manually changed it sinces its only 22
+colnames(rnaCount)[3] ="HT1080.R132H.30"
+colnames(rnaCount)[4] ="HT1080.R132H.54"
+colnames(rnaCount)[5] ="HT1080.R132H.55" 
+colnames(rnaCount)[6] ="HT1080.R132Q.28" #4
+colnames(rnaCount)[7] ="HT1080.R132Q.31" #5
+colnames(rnaCount)[8] ="HT1080.R132Q.43" #6
+colnames(rnaCount)[9] ="HT1080.R132Q.46" #7
+colnames(rnaCount)[10] ="HT1080.R132Q.49" #8
+colnames(rnaCount)[11] ="HT1080.WT.32" #9
+colnames(rnaCount)[12] ="HT1080.WT.44" #10
+colnames(rnaCount)[13] ="U87MG.R132H.10" #11
+colnames(rnaCount)[14] ="U87MG.R132H.1" #12
+colnames(rnaCount)[15] ="U87MG.R132H.24" #13
+colnames(rnaCount)[16] ="U87MG.R132H.4" #14
+colnames(rnaCount)[17] ="U87MG.R132Q.19" #15
+colnames(rnaCount)[18] ="U87MG.R132Q.20" #16
+colnames(rnaCount)[19] ="U87MG.R132Q.23" #17
+colnames(rnaCount)[20] ="U87MG.R132Q.27" #18
+colnames(rnaCount)[21] ="U87MG.R132Q.9" #19
+colnames(rnaCount)[22] ="U87MG.WT.21" #20
+colnames(rnaCount)[23] ="U87MG.WT.29" #21
+colnames(rnaCount)[24] ="U87MG.WT.7" #22
+
+all(colnames(rnaCount)[-c(1,2)] %in% map$Sample.Name) #Returns true so our labels are correct
+
+count_mat <- as.matrix(rnaCount[, -c(1, 2)]) #Eemove Geneid and Length
+map2 <- map[match(colnames(count_mat), map$Sample.Name), ] #Reorder metadata to match counts
+```
+
+##Create DESeq Object
+```{R}
+dds <- DESeqDataSetFromMatrix(
+  countData = count_mat,
+  colData = map2,
+  design = ~ Condition
+)
+dds
+
+# filter any counts less than 10
+# Tutorial said that it eeduces the memory size of the dds data object and makes vis better.
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+dds
+```
+
+##Setting up DESeq
+```{R}
+# set the reference to be the control
+dds$Condition <- relevel(dds$Condition, ref = 'WT') #WT is our control
+
+
+#NORMALIZE
+# get normalized counts
+dds <- estimateSizeFactors(dds)
+normalized_counts <- counts(dds, normalized = TRUE)
+
+# If you would like to write the normalized counts to a file, you can run the following command. Note that you need to specify the file path. 
+# write.table(normalized_counts, file=normalized_counts_data_file_path, sep = '\t', quote=F, col.names = NA)
+```
+
+##Run Differential Expression
+```{R}
+dds <- DESeq(dds)
+res <- results(dds)
+res
+```
+
+The results show our log2 fold change of mutation vs wild type using a wald t-test, telling us if they are indeed different or not between wild type and mutation samples, using the log fold change value, lower than 0.05 means that they are significantly different from wild type.
+
+##Summary
+```{R}
+summary(res)
+```
+Above is the summary results which tell us that our adjusted p-val is < 0.1, showing that 37 genes are significantly unregulated and 48 are significantly down regulated. Also, note that its 0.11 and 0.14% respectively so only 25% of genes are accounted for, possibly due to our adjusted p-val.
+
+##Exact adjusted p-valus
+```{R}
+sum(res$padj < 0.1, na.rm=TRUE)
+```
+85 Genes are significant.
+
+##Change to 0.05 p-val
+```{R}
+res05 <- results(dds, alpha=0.05)
+summary(res05)
+
+sum(res$padj < 0.05, na.rm=TRUE) #Number of genes with adj. p-val
+
+# write results to file, notice you need to specify the file path. 
+# write.csv(as.data.frame(res), file=deseq_results_file_path)
+```
+Above shows the new summary with our alpha set at 0.05, and we a lower amount of genes due to our cutoff being more strict, so now only 42 genes are significant with 0.063% being upregualted and 0.087% being downregualted.
+
+##Visualize results
+```{R}
+data <- data.frame(res)
+head(data)
+
+rld <- rlog(dds) #logs and pca of our data
+plotPCA(rld, intgroup = "Condition")
+plotPCA(rld, intgroup = "Tumor.Type") 
+```
+Our first plot is a PCA to see how they samples are grouped and its clearly seen that the variation is between the tumor type, because when we color by tumor type they split up, but when we do it by WT vs mutation the wild types are mixed in with ther respective tumor types.
+
+##Volcano plot
+```{R}
+data <- data %>%
+  mutate(
+  Expression = case_when(log2FoldChange >= log(1) & padj <= 0.05 ~ "Up-regulated",
+  log2FoldChange <= -log(1) & padj <= 0.05 ~ "Down-regulated",
+  TRUE ~ "Unchanged")
+  )
+head(data)
+```
+-This edits our data to be able to compare fold change with p vals when comparing down or up regulated
+
+##Top 10 most variable gene
+```{R}
+top <- 10
+# we are getting the top 10 up and down regulated genes by filtering the column Up-regulated and Down-regulated and sorting by the adjusted p-value. 
+top_genes <- bind_rows(
+  data %>%
+  filter(Expression == 'Up-regulated') %>%
+  arrange(padj, desc(abs(log2FoldChange))) %>%
+  head(top),
+  data %>%
+  filter(Expression == 'Down-regulated') %>%
+  arrange(padj, desc(abs(log2FoldChange))) %>%
+  head(top)
+  )
+# create a datframe just holding the top 10 genes
+Top_Hits = head(arrange(data,pvalue),10)
+Top_Hits
+```
+
+##Basic Volcano plot of sig.
+```{R}
+data$label = if_else(rownames(data) %in% rownames(Top_Hits), rownames(data), "")
+# basic plot
+p1 <- ggplot(data, aes(log2FoldChange, -log(pvalue,10))) + # -log10 conversion
+geom_point( size = 2/5) +
+xlab(expression("log"[2]*"FC")) +
+ylab(expression("-log"[10]*"P-Value")) +
+xlim(-4.5, 4.5)
+p1
+
+p2 <- ggplot(data, aes(log2FoldChange, -log(pvalue,10))) + # -log10 conversion
+geom_point(aes(color = Expression), size = 2/5) +
+geom_hline(yintercept= -log10(0.05), linetype="dashed", linewidth = .4) +
+xlab(expression("log"[2]*"FC")) +
+ylab(expression("-log"[10]*"P-Value")) +
+scale_color_manual(values = c("firebrick3", "black", "firebrick3")) +
+xlim(-4.5, 4.5) +
+theme(legend.position = "none")
+p2
+
+p3 <- ggplot(data, aes(log2FoldChange, -log(pvalue,10))) + # -log10 conversion
+geom_point(aes(color = Expression), size = 2/5) +
+geom_hline(yintercept=-log10(0.05), linetype="dashed", linewidth = .4) +
+xlab(expression("log"[2]*"FC")) +
+ylab(expression("-log"[10]*"P-Value")) +
+scale_color_manual(values = c("firebrick3", "black", "firebrick3")) +
+xlim(-4.5, 4.5) +
+theme(legend.position = "none") +
+geom_text_repel(aes(label = label), size = 2.5)
+p3
+
+# plot with up/down
+p4 <- ggplot(data, aes(log2FoldChange, -log(pvalue,10))) + # -log10 conversion
+geom_point(aes(color = Expression), size = 2/5) +
+#geom_hline(yintercept=-log10(0.05), linetype="dashed", linewidth = .4) +
+xlab(expression("log"[2]*"FC")) +
+ylab(expression("-log"[10]*"P-Value")) +
+scale_color_manual(values = c("dodgerblue3", "black", "firebrick3")) +
+xlim(-4.5, 4.5)
+p4
+```
+In order of plot we go from just a volcano plot, red significance, red with labels (but the labels arent showing up) and only top 10 sig.,Down vs up regulated.
+
+My understanding of volcano plots:
+-Center = now change
+-Left = down regulated
+-Right = up regulated
+-Higher up = more significant
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
