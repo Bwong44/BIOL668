@@ -1,0 +1,312 @@
+---
+title: "WongBrandon668FinalProject"
+author: "Brandon Wong"
+date: "2026-05-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr) #Filtering data
+library(ggfortify) #Plot pca
+library(ggplot2) #Plot pca
+library(tidyverse) #For RCLR
+library(vegan) #For RCLR, PERMANOVA, and NMDS
+library(randomForest)
+
+#has to run this once for pairwiseAdonis
+#install.packages("devtools")
+#devtools::install_github("pmartinezarbizu/pairwiseAdonis")
+library(pairwiseAdonis) #For pairwise PERMANOVA
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Data Prep
+-I will be using data from my lab, but due to time constraints, I will reduce the dataset to analyze only one organ. I want to analyze the differences between control groups and experimental groups of 5days and 19days post infection. Everything will be ran with K=2 just to make plots simpler.
+-Workflow:
+  -Clean dataset
+  -Compare TIC vs RCLR Normalization (analysis 1/2)
+  -Run PCA on both (analysis 3) (PCoA couldn't run)
+  -Run NMDS (analysis 4)
+  -Run PERMANOVA (analysis 5)
+  -Run Pairwise PERMANOVA (analysis 6)
+  -Run Random Forest (analysis 7)
+  
+#Data Prep Chunk  
+```{R, Clean dataset}
+#I will be using data from my lab, but for time, I will reduce the dataset to analyze only one organ
+FullFT <- read.csv("Giardia_HILLIC_POS_quant_OSremoved_blankremoved3.csv")
+FullMeta <- read.csv("metadata_Giardia_POS.csv")
+
+#Here we will filter out one organ, I am choosing duodenum in this case
+DuodenumOnlyFT <- FullFT %>%
+  select(matches("duodenum", ignore.case = TRUE)) %>% #keep only duodenum column
+  rename_with(~ sub("\\.(mzML|mzXML).*", "", .x)) %>% #Remove everything from .mzML onward
+  select(!matches("QC|Start", ignore.case = TRUE)) %>% #Removes QCs and blanks
+  rename_with(~ gsub("\\.", "-", .x)) #Changes . to - to match with metadata
+
+DuodenumOnlyMeta <- FullMeta %>%
+  filter(grepl("duodenum", OrganType, ignore.case = TRUE))
+DuodenumOnlyMeta <- DuodenumOnlyMeta[-(1:13), ] #Remove blanks and LC-MS QC metadata samples
+```
+
+#TIC Norm
+```{R, TIC norm chunk}
+table <- DuodenumOnlyFT
+feat_mat <- table #FeatureTable: row=metabolites, cols=samples
+
+#TIC normalize each sample column
+norm_table <- sweep(feat_mat, 2, colSums(feat_mat, na.rm = TRUE), FUN = "/") #Divides each value in each col by that col's total sum
+norm_table[is.na(norm_table)] <- 0
+
+#Remove empty rows
+norm_table_t <- as.data.frame(t(norm_table), check.names = FALSE) #Transpose so rows = samples, columns = metabolites
+empty_cols <- colnames(norm_table_t)[colSums(norm_table_t, na.rm = TRUE) == 0] #Remove empty features
+cat("Number of empty feature columns removed:", length(empty_cols), "\n")
+
+norm_table_no_empty <- norm_table_t[, colSums(norm_table_t, na.rm = TRUE) > 0, drop = FALSE]
+
+#Remove zero-variance features
+zero_var_cols <- names(norm_table_no_empty)[
+  apply(norm_table_no_empty, 2, var, na.rm = TRUE) == 0
+]
+
+cat("Number of zero-variance feature columns removed:", length(zero_var_cols), "\n")
+
+norm_table_pca <- norm_table_no_empty[
+  , apply(norm_table_no_empty, 2, var, na.rm = TRUE) > 0,
+  drop = FALSE
+]
+
+cat("Samples used in PCA:", nrow(norm_table_pca), "\n")
+cat("Features used in PCA:", ncol(norm_table_pca), "\n")
+```
+
+#RCLR Transform instead of TIC
+```{R, RCLR Transform}
+#RCLR Transform instead of TIC
+table <- DuodenumOnlyFT
+
+rclr_input <- as.data.frame(t(table), check.names = FALSE) #Transposes so that rows=samples
+
+#Remove empty features
+keep_cols <- colSums(rclr_input, na.rm = TRUE) > 0 #Checks if the col sum is bigger than 0
+cat("Number of empty features removed:", sum(!keep_cols), "\n") #Drops col sums = 0
+rclr_input <- rclr_input[, keep_cols, drop = FALSE] 
+
+#Run RCLR
+RCLR_norm <- decostand(rclr_input, method = "rclr")
+
+#Minimum val substitution
+RCLR_norm_min_value <- min(RCLR_norm, na.rm = TRUE)
+cat("RCLR min value:", RCLR_norm_min_value, "\n")
+RCLR_norm_min_sub <- RCLR_norm
+RCLR_norm_min_sub[RCLR_norm_min_sub == 0] <- RCLR_norm_min_value
+
+#Remove zero-variance features for PCA
+keep_var <- apply(RCLR_norm_min_sub, 2, var, na.rm = TRUE) > 0
+cat("Number of zero-variance features removed:", sum(!keep_var), "\n")
+
+RCLR_norm_pca <- RCLR_norm_min_sub[, keep_var, drop = FALSE] #Creates a new df for RCLR
+
+cat("Samples used in RCLR PCA:", nrow(RCLR_norm_pca), "\n")
+cat("Features used in RCLR PCA:", ncol(RCLR_norm_pca), "\n")
+```
+#PCA Plot (PCoA took too long due to dist matrix)
+-The chunk below will be used to visualize the pca
+```{R, PCA Chunk}
+pca_res <- prcomp(norm_table_pca, center = TRUE, scale. = TRUE) #Run PCA, centering and scaling data
+
+screeplot(pca_res) #Screeplot to see the PC variance 
+
+#Extract first 3 PCA axes
+pca_coords <- as.data.frame(pca_res$x[, 1:3])
+colnames(pca_coords) <- c("PC1", "PC2", "PC3")
+
+#Percent variance explained
+pca_var <- (pca_res$sdev^2) / sum(pca_res$sdev^2) * 100
+cat("PC1 variance:", round(pca_var[1], 2), "%\n")
+cat("PC2 variance:", round(pca_var[2], 2), "%\n")
+cat("PC3 variance:", round(pca_var[3], 2), "%\n")
+```
+
+#Run PCA for RCLR
+```{R, PCA RCLR Chunk}
+# Run PCA for RCLR
+pca_rclr <- prcomp(RCLR_norm_pca, center = TRUE, scale. = TRUE)
+
+screeplot(pca_rclr)
+
+#Extract first 3 PCA axes
+pca_rclr_coords <- as.data.frame(pca_rclr$x[, 1:3])
+colnames(pca_rclr_coords) <- c("PC1", "PC2", "PC3")
+
+#Percent variance explained, higher PC1 and PC2 due to log ratio of RCLR transformation
+pca_rclr_var <- (pca_rclr$sdev^2) / sum(pca_rclr$sdev^2) * 100
+
+cat("PC1 variance:", round(pca_rclr_var[1], 2), "%\n")
+cat("PC2 variance:", round(pca_rclr_var[2], 2), "%\n")
+cat("PC3 variance:", round(pca_rclr_var[3], 2), "%\n")
+```
+
+#Plotting PCA Results of TIC
+```{R, Plotting PCA Chunk}
+meta_pca <- DuodenumOnlyMeta[DuodenumOnlyMeta$sampleid %in% rownames(pca_res$x),] #Filtering used to only keep metadata that is used in samples for PCA
+
+#Reorder metadata to match PCA row order
+meta_pca <- meta_pca[match(rownames(pca_res$x), meta_pca$sampleid),]
+
+autoplot(
+  pca_res,
+  data = meta_pca,
+  colour = "InfectionStatus",
+  size = 2,
+  frame = TRUE
+) +
+  theme_classic() +
+  ggtitle("PCA: TIC Norm")
+
+autoplot(
+  pca_res,
+  data = meta_pca,
+  colour = "InfectionStatus_PostInfectionDays_Combo",
+  size = 2,
+  frame = TRUE
+) +
+  theme_classic() +
+  ggtitle("PCA: TIC Norm")
+```
+
+#Plot RCLR PCA
+```{R}
+#Align metadata to RCLR PCA samples, filtering used to only keep metadata that is used in samples for PCA
+meta_rclr <- DuodenumOnlyMeta[DuodenumOnlyMeta$sampleid %in% rownames(pca_rclr$x),]
+meta_rclr <- meta_rclr[match(rownames(pca_rclr$x), meta_rclr$sampleid),]
+
+cat("PCA samples:", nrow(pca_rclr$x), "\n")
+cat("Metadata rows:", nrow(meta_rclr), "\n")
+cat("Unmatched metadata rows:", sum(is.na(meta_rclr$sampleid)), "\n")
+
+#Plot RCLR PCA
+autoplot(
+  pca_rclr,
+  data = meta_rclr,
+  colour = "InfectionStatus",
+  size = 2,
+  frame = TRUE
+) +
+  theme_classic() +
+  xlab(paste0("PC1 (", round(pca_rclr_var[1], 2), "%)")) +
+  ylab(paste0("PC2 (", round(pca_rclr_var[2], 2), "%)")) +
+  ggtitle("PCA: RCLR Transformation")
+
+autoplot(
+  pca_rclr,
+  data = meta_rclr,
+  colour = "InfectionStatus_PostInfectionDays_Combo",
+  size = 2,
+  frame = TRUE
+) +
+  theme_classic() +
+  xlab(paste0("PC1 (", round(pca_rclr_var[1], 2), "%)")) +
+  ylab(paste0("PC2 (", round(pca_rclr_var[2], 2), "%)")) +
+  ggtitle("PCA: RCLR Transformation")
+```
+-When looking and comparing the results from both TIC and RCLR, they show the same pattern, so I would say that either or would work since they both show that the data is relatively similar for both infected and uninfected. I would say that with RCLR the InfectionStatus has more of a similar variance when compared to the TIC Norm PCA.
+
+-When I look at InfectionStatus_PostInfectionDays_Combo I am splitting up my 4 groupings of infected and uninfected as well as their different time points to see if we can see any variation in that, and again both show similar patterns, showing that for our data RCLR would be a good option as an alternative transformation, handling the zero values well. What we see is that the groups all overlap, for 5 days infected and uninfected I can see a slight sepration along PC1, and with 19 days we can see a bigger variance difference between infection and uninfected.
+
+#TIC PERMANOVA
+```{R, TIC PERMANOVA}
+#PERMANOVA for TIC data
+permanova_tic <- adonis2(
+  dist(norm_table_pca) ~ InfectionStatus_PostInfectionDays_Combo, data = meta_pca, permutations = 999)
+permanova_tic
+
+#Check dispersion for TIC data
+bd_tic <- betadisper(dist(norm_table_pca), meta_pca$InfectionStatus_PostInfectionDays_Combo)
+anova(bd_tic)
+```
+-PERMANOVA is significant and beta dispersion is significant so we have to interpret the PERMANOVA results with caution due to the variabilty in dispersion.
+
+#RCLR PERMANOVA
+```{R, RCLR PERMANOVA}
+set.seed(1) #For reproducible since it uses permutation the value will change
+permanova_rclr <- adonis2(dist(RCLR_norm_pca) ~ InfectionStatus_PostInfectionDays_Combo, data = meta_rclr, permutations = 999)
+permanova_rclr
+
+bd <- betadisper(dist(RCLR_norm_pca), meta_rclr$InfectionStatus) #Not sig so we can interpret PERMANOVA
+anova(bd)
+```
+-PERMANOVA is significant and beta dispersion is not significant so we have confidence in our PERMANOVA results, that it's not just due to dispersion.
+-We will also now do a pairwise PERMANOVA because it was significant.
+
+#RCLR Pairwise PERMANOVA
+```{R, RCLR PERMANOVA}
+set.seed(1) #For reproducible since it uses permutation the value will change
+pairwise_res <- pairwise.adonis2(
+  RCLR_norm_pca ~ InfectionStatus_PostInfectionDays_Combo,
+  data = meta_rclr,
+  permutations = 999,
+  method = "euclidean"
+)
+pairwise_res
+```
+-With our pairwise results we see that 5Days_Infected_vs_19Days_Infected and 5Days_Infected_vs_19Days_Uninfected are signficaintly different from one another.
+
+#Switch to NMDS using RCLR only
+-Now I want to use NMDS only using RCLR since it seems to represent the data similarly, NMDS is usally ran with a different distance matrix like bray-curtis and is rank based, but I will just run euclidean for reproducible 
+```{R, NMDS of RCLR Data}
+#NMDS using the vegan package
+nmds_rclr <- metaMDS(
+  RCLR_norm_pca,
+  distance = "euclidean",
+  k = 2,
+  trymax = 100
+)
+
+nmds_rclr$stress
+
+#Plot NMDS with ggplot
+nmds_scores <- as.data.frame(scores(nmds_rclr, display = "sites")) #Extract coordiantes
+nmds_scores$sampleid <- rownames(nmds_scores) #Extract sampleids
+nmds_scores <- merge(nmds_scores, meta_rclr, by = "sampleid") #Merge in our metadata for each sample
+
+ggplot(nmds_scores, aes(NMDS1, NMDS2, color =InfectionStatus_PostInfectionDays_Combo)) +
+  geom_point() +
+  stat_ellipse(level = 0.95, linewidth = 0.8) +
+  theme_classic() +
+  labs(
+    title = "NMDS: RCLR Data, Stress: 0.0363",
+    x = "NMDS1",
+    y = "NMDS2",
+    color = "Group"
+  )
+```
+-Stress level of 0.0363 is very good and shows that the 2D plot represents the data well in euclidean distance.
+
+#Random Forest
+-For our last part I will use RF to see if I can classify our 4 groups correctly, maybe also look at most important feature, but right now they are all named in a way that we can't get any useful information out of it, maybe just do it so we can see the output.
+```{R, RF of RCLR data}
+set.seed(1) #For reproducible 
+meta_rclr$InfectionStatus_PostInfectionDays_Combo <- as.factor(meta_rclr$InfectionStatus_PostInfectionDays_Combo) #Change to factor
+
+#Run RF
+rf_model <- randomForest(
+  x = RCLR_norm_pca,
+  y = meta_rclr$InfectionStatus_PostInfectionDays_Combo, 
+  ntree = 500,
+  importance = TRUE
+)
+
+rf_model
+```
+-Has a high error rate of 62.5%, so predictions are mostly wrong, what was interesting is that 19days uninfected got the most right, it was expected though since most of the groups were overlapping.
+
+#Feature Importance
+```{R, Feature importance of RF}
+varImpPlot(rf_model, n.var = 10, main = "Top 10 Features")
+```
+
+
+
+
